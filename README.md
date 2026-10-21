@@ -46,3 +46,8 @@ SITARIS (Sistem Tamu dan Registrasi Kunjungan) – Terdengar sangat lekat dengan
 Jika Anda harus mempresentasikan ide ini ke atasan, gunakan rumus Nama + Kepanjangan + Filosofi.
 
 Contoh: "Nama aplikasinya SITARIS (Sistem Tamu & Registrasi Kunjungan). Konsep visualnya menggunakan ikon buku digital dengan logo ANRI, dan namanya sengaja mirip dengan 'Arsiparis' agar senada dengan budaya kerja di ANRI."
+
+
+Masukkan Email: admin@anri.go.id (atau email apapun yang Anda mau).
+
+Masukkan Password: Rahasia123! (pastikan Anda mengingatnya).
