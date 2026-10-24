@@ -47,7 +47,10 @@ Jika Anda harus mempresentasikan ide ini ke atasan, gunakan rumus Nama + Kepanja
 
 Contoh: "Nama aplikasinya SITARIS (Sistem Tamu & Registrasi Kunjungan). Konsep visualnya menggunakan ikon buku digital dengan logo ANRI, dan namanya sengaja mirip dengan 'Arsiparis' agar senada dengan budaya kerja di ANRI."
 
-
+# Role Super Admin
 Masukkan Email: admin@anri.go.id (atau email apapun yang Anda mau).
-
 Masukkan Password: Rahasia123! (pastikan Anda mengingatnya).
+
+# role pimpinan
+PW = 'PIMPINAN'
+email = 'pimpinan@anri.go.id';

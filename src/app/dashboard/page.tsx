@@ -1,283 +1,140 @@
-"use client";
+'use client';
 
-import React, { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-export default function DashboardPage() {
+export default function DashboardHome() {
   const router = useRouter();
   const [kunjunganList, setKunjunganList] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
+  
+  // 1. State baru untuk menyimpan Role pengguna
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchData = async () => {
-      const { data, error } = await supabase
-        .from("kunjungan")
-        .select(`*, instansi (nama)`)
-        .order("waktu_kunjungan", { ascending: false });
-
-      if (error) {
-        console.error("Gagal mengambil data:", error);
-      } else if (data) {
-        setKunjunganList(data);
+    const fetchAuthAndData = async () => {
+      // 2. Cek siapa yang sedang login
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
+        // 3. Ambil role dari tabel profiles berdasarkan ID user
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+          
+        if (profile) {
+          setUserRole(profile.role);
+        }
       }
-      setLoading(false);
-    };
 
-    fetchData();
+      // Ambil data kunjungan (kode lama)
+      const { data } = await supabase.from('kunjungan').select('*, instansi(nama)');
+      if (data) setKunjunganList(data);
+    };
+    fetchAuthAndData();
   }, []);
 
   const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (!error) {
-      router.push("/login");
-    } else {
-      alert("Gagal logout: " + error.message);
-    }
+    await supabase.auth.signOut();
+    router.push('/login');
   };
 
   const totalKunjungan = kunjunganList.length;
-  const hariIni = new Date().toISOString().split("T")[0];
-  const kunjunganHariIni = kunjunganList.filter((item) =>
-    item.waktu_kunjungan.startsWith(hariIni),
-  ).length;
-  const menunggu = kunjunganList.filter(
-    (item) => item.status_surat !== "ada",
-  ).length;
-  const selesai = kunjunganList.filter(
-    (item) => item.status_surat === "ada",
-  ).length;
+  const hariIni = new Date().toISOString().split('T')[0];
+  const kunjunganHariIni = kunjunganList.filter(item => item.waktu_kunjungan.startsWith(hariIni)).length;
+  const menunggu = kunjunganList.filter(item => item.status_surat !== 'ada').length;
+  const selesai = kunjunganList.filter(item => item.status_surat === 'ada').length;
 
-  const filteredData = kunjunganList.filter((item) => {
-    const nama = item.nama_perwakilan?.toLowerCase() || "";
-    const instansi = item.instansi?.nama?.toLowerCase() || "";
-    const keyword = searchQuery.toLowerCase();
-
-    return nama.includes(keyword) || instansi.includes(keyword);
+  const last7Days = [...Array(7)].map((_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - (6 - i)); 
+    return d.toISOString().split('T')[0];
+  });
+  const dataGrafik = last7Days.map(date => {
+    const count = kunjunganList.filter(k => k.waktu_kunjungan.startsWith(date)).length;
+    return { tanggal: new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }), jumlah: count };
   });
 
-  // --- FUNGSI EKSPOR KE CSV ---
-  const handleExportCSV = () => {
-    if (filteredData.length === 0) {
-      alert("Tidak ada data untuk diekspor!");
-      return;
-    }
+  const instansiCount = kunjunganList.reduce((acc, curr) => {
+    const nama = curr.instansi?.nama || 'Lainnya / Manual';
+    acc[nama] = (acc[nama] || 0) + 1;
+    return acc;
+  }, {});
+  const topInstansi = Object.entries(instansiCount)
+    .map(([nama, jumlah]) => ({ nama, jumlah: jumlah as number }))
+    .sort((a, b) => b.jumlah - a.jumlah).slice(0, 5);
 
-    const headers = [
-      "Waktu Kunjungan",
-      "Nama Tamu",
-      "Instansi",
-      "Jalur Input",
-      "Status Surat",
-    ];
-
-    const csvRows = filteredData.map((item) => {
-      const waktu = new Date(item.waktu_kunjungan).toLocaleString("id-ID");
-      const nama = `"${item.nama_perwakilan || "-"}"`;
-      const instansi = `"${item.instansi?.nama || "-"}"`;
-      const jalur = `"${item.jalur_input}"`;
-      const status = `"${item.status_surat.toUpperCase()}"`;
-
-      // UBAH DI SINI: Gunakan titik koma (;) alih-alih koma (,)
-      return [waktu, nama, instansi, jalur, status].join(";");
-    });
-
-    // UBAH DI SINI JUGA: Gunakan titik koma (;) untuk header
-    const csvString = [headers.join(";"), ...csvRows].join("\n");
-
-    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", `Laporan_Kunjungan_ANRI_${hariIni}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
   return (
     <div className="flex h-screen bg-gray-100 font-sans">
       <aside className="w-64 bg-[#1e293b] text-white flex flex-col">
         <div className="p-6 flex items-center gap-3 border-b border-gray-700">
-          <div className="w-10 h-10 bg-blue-500 rounded font-bold flex items-center justify-center">
-            ANRI
-          </div>
-          <div>
-            <h2 className="font-bold text-sm">Arsip Nasional</h2>
-            <p className="text-xs text-gray-400">Republik Indonesia</p>
-          </div>
+          <img src="/logo-anri.jpg" alt="Logo ANRI" className="w-12 h-12 object-contain bg-white rounded p-1" />
+          <div><h2 className="font-bold text-sm">Arsip Nasional</h2><p className="text-xs text-gray-400">Republik Indonesia</p></div>
         </div>
         <nav className="flex-1 p-4 space-y-2">
-          <a
-            href="#"
-            className="flex items-center gap-3 hover:bg-[#334155] px-4 py-3 rounded-lg text-sm font-medium transition-colors text-gray-300"
-          >
-            🏠 Home
-          </a>
-          <a
-            href="/dashboard"
-            className="flex items-center gap-3 bg-[#334155] px-4 py-3 rounded-lg text-sm font-medium text-white"
-          >
-            👥 Kunjungan
-          </a>
-          <a
-            href="/dashboard/master"
-            className="flex items-center gap-3 hover:bg-[#334155] px-4 py-3 rounded-lg text-sm font-medium transition-colors text-gray-300"
-          >
-            📂 Master Data
-          </a>
+          <a href="/dashboard" className="flex items-center gap-3 bg-[#334155] px-4 py-3 rounded-lg text-sm font-medium text-white shadow-inner">🏠 Home</a>
+          <a href="/dashboard/kunjungan" className="flex items-center gap-3 hover:bg-[#334155] px-4 py-3 rounded-lg text-sm font-medium transition-colors text-gray-300">👥 Kunjungan</a>
+          
+          {/* 4. Logika RBAC: Render menu Master Data HANYA jika role-nya SUPER_ADMIN */}
+          {userRole === 'SUPER_ADMIN' && (
+            <a href="/dashboard/master" className="flex items-center gap-3 hover:bg-[#334155] px-4 py-3 rounded-lg text-sm font-medium transition-colors text-gray-300">📂 Master Data</a>
+          )}
+          
         </nav>
         <div className="p-4 border-t border-gray-700">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 hover:bg-red-500 hover:text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors text-gray-400"
-          >
-            🚪 Keluar (Logout)
-          </button>
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 hover:bg-red-500 hover:text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors text-gray-400">🚪 Keluar</button>
         </div>
       </aside>
 
       <main className="flex-1 p-8 overflow-y-auto">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">
-              Direktorat Informasi Kearsipan
-            </h1>
-            <p className="text-gray-500 text-sm">Dashboard Kunjungan</p>
-          </div>
-          <a
-            href="/dashboard/tambah"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors block text-center"
-          >
-            + Tambah Kunjungan
-          </a>
+        {/* Konten main persis sama seperti sebelumnya (grafik dan statistik) */}
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-gray-800">Ringkasan Analitik</h1>
+          <p className="text-gray-500 text-sm">Overview data kunjungan tamu ANRI terkini</p>
         </div>
-
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-[#1e293b] text-white p-6 rounded-xl shadow-sm flex justify-between items-center">
-            <div>
-              <p className="text-3xl font-bold">{totalKunjungan}</p>
-              <p className="text-sm text-gray-400 mt-1">Total Kunjungan</p>
-            </div>
-            <span className="text-2xl opacity-50">👥</span>
+          <div className="bg-gradient-to-br from-[#1e293b] to-gray-800 text-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow flex justify-between items-center">
+            <div><p className="text-4xl font-bold">{totalKunjungan}</p><p className="text-sm text-gray-300 mt-1">Total Kunjungan</p></div><span className="text-3xl opacity-30">👥</span>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
-            <div>
-              <p className="text-3xl font-bold text-blue-600">
-                {kunjunganHariIni}
-              </p>
-              <p className="text-sm text-gray-500 mt-1">Hari Ini</p>
-            </div>
-            <span className="text-2xl">📅</span>
+            <div><p className="text-4xl font-bold text-blue-600">{kunjunganHariIni}</p><p className="text-sm text-gray-500 mt-1">Hari Ini</p></div><span className="text-3xl drop-shadow-sm">📅</span>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
-            <div>
-              <p className="text-3xl font-bold text-yellow-600">{menunggu}</p>
-              <p className="text-sm text-gray-500 mt-1">Menunggu</p>
-            </div>
-            <span className="text-2xl">⏳</span>
+            <div><p className="text-4xl font-bold text-yellow-500">{menunggu}</p><p className="text-sm text-gray-500 mt-1">Menunggu Surat</p></div><span className="text-3xl drop-shadow-sm">⏳</span>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
-            <div>
-              <p className="text-3xl font-bold text-green-600">{selesai}</p>
-              <p className="text-sm text-gray-500 mt-1">Selesai</p>
-            </div>
-            <span className="text-2xl">✅</span>
+            <div><p className="text-4xl font-bold text-green-500">{selesai}</p><p className="text-sm text-gray-500 mt-1">Surat Selesai</p></div><span className="text-3xl drop-shadow-sm">✅</span>
           </div>
         </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="flex justify-between items-center mb-4">
-            <input
-              type="text"
-              placeholder="🔍 Cari tamu atau instansi..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="border border-gray-300 rounded-lg px-4 py-2 w-72 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            {/* Tombol dihubungkan dengan fungsi handleExportCSV */}
-            <button
-              onClick={handleExportCSV}
-              className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center gap-2"
-            >
-              📥 Ekspor Laporan
-            </button>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <h2 className="text-lg font-bold text-gray-800 mb-6">Tren Kunjungan (7 Hari Terakhir)</h2>
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dataGrafik}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                  <XAxis dataKey="tanggal" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} dy={10} />
+                  <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} dx={-10} />
+                  <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Bar dataKey="jumlah" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={40} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-gray-600">
-              <thead className="bg-gray-50 text-gray-700 uppercase font-semibold">
-                <tr>
-                  <th className="px-4 py-3 rounded-tl-lg">Waktu</th>
-                  <th className="px-4 py-3">Nama Tamu</th>
-                  <th className="px-4 py-3">Instansi</th>
-                  <th className="px-4 py-3">Jalur Input</th>
-                  <th className="px-4 py-3">Status Surat</th>
-                  <th className="px-4 py-3 rounded-tr-lg">Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={6} className="text-center py-6 text-gray-500">
-                      Memuat data...
-                    </td>
-                  </tr>
-                ) : filteredData.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="text-center py-6 text-gray-500">
-                      Tidak ada data yang cocok dengan pencarian Anda.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredData.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="border-b border-gray-100 hover:bg-gray-50"
-                    >
-                      <td className="px-4 py-3">
-                        {new Date(item.waktu_kunjungan).toLocaleTimeString(
-                          "id-ID",
-                          { hour: "2-digit", minute: "2-digit" },
-                        )}
-                      </td>
-                      <td className="px-4 py-3 font-medium text-gray-800">
-                        {item.nama_perwakilan}
-                      </td>
-                      <td className="px-4 py-3">
-                        {item.instansi?.nama || "-"}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-semibold uppercase">
-                          {item.jalur_input}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`px-2 py-1 rounded text-xs font-semibold uppercase ${
-                            item.status_surat === "ada"
-                              ? "bg-green-100 text-green-700"
-                              : item.status_surat === "mepet"
-                                ? "bg-yellow-100 text-yellow-800"
-                                : "bg-red-100 text-red-700"
-                          }`}
-                        >
-                          {item.status_surat}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <a
-                          href={`/dashboard/${item.id}`}
-                          className="text-blue-600 hover:underline font-medium"
-                        >
-                          Detail
-                        </a>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <h2 className="text-lg font-bold text-gray-800 mb-6">Instansi Teraktif</h2>
+            <div className="space-y-4">
+              {topInstansi.length === 0 ? (<p className="text-sm text-gray-500 text-center py-4">Belum ada data kunjungan.</p>) : (
+                topInstansi.map((instansi, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                    <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm">{index + 1}</div><p className="font-medium text-sm text-gray-700">{instansi.nama}</p></div>
+                    <span className="text-sm font-bold text-gray-900 bg-white px-2 py-1 rounded border border-gray-200 shadow-sm">{instansi.jumlah}</span>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </main>
