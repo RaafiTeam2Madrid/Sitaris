@@ -43,10 +43,16 @@ export default function KunjunganPage() {
     const csvRows = filteredData.map(item => [
       new Date(item.waktu_kunjungan).toLocaleString('id-ID'), `"${item.nama_perwakilan || '-'}"`, `"${item.instansi?.nama || '-'}"`, `"${item.jalur_input}"`, `"${item.status_surat.toUpperCase()}"`
     ].join(';'));
+    
+    const csvContent = [headers.join(';'), ...csvRows].join('\n');
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(new Blob([headers.join(';'), ...csvRows].join('\n'), { type: 'text/csv;charset=utf-8;' }));
+    
+    // Perbaikan: csvContent dibungkus kurung siku agar dikenali sebagai BlobPart[] oleh TypeScript
+    link.href = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }));
     link.setAttribute('download', 'Data_Kunjungan.csv');
-    document.body.appendChild(link); link.click(); link.remove();
+    document.body.appendChild(link); 
+    link.click(); 
+    link.remove();
   };
 
   return (
