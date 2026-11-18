@@ -60,7 +60,7 @@ export default function KunjunganPage() {
       {/* Sidebar - Menggunakan animasi yang sama dengan Dashboard */}
       <aside className="w-64 bg-[#1e293b] text-white flex flex-col shadow-2xl z-10">
         <div className="p-6 flex items-center gap-3 border-b border-gray-700/50">
-          <img src="/logo-anri.png" alt="Logo ANRI" className="w-12 h-12 object-contain bg-white rounded-lg p-1 shadow-sm transition-transform duration-300 hover:rotate-3 hover:scale-105" />
+          <img src="/logo-anri.jpg" alt="Logo ANRI" className="w-12 h-12 object-contain bg-white rounded-lg p-1 shadow-sm transition-transform duration-300 hover:rotate-3 hover:scale-105" />
           <div><h2 className="font-bold text-sm tracking-wide">Arsip Nasional</h2><p className="text-xs text-gray-400">Republik Indonesia</p></div>
         </div>
         <nav className="flex-1 p-4 space-y-2">
