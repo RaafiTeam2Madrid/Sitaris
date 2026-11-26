@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase'; // Memanggil jembatan Supabase yang tadi kita buat
+import { supabase } from '@/lib/supabase';
 
 export default function FormTamuPublik() {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+  const [isAgreed, setIsAgreed] = useState(false);
+
   // State untuk menyimpan data pilihan dropdown dari database
   const [instansiList, setInstansiList] = useState<any[]>([]);
   const [topikList, setTopikList] = useState<any[]>([]);
@@ -17,7 +18,9 @@ export default function FormTamuPublik() {
     jumlah_rombongan: 4,
     kontak: '',
     topik_id: '',
-    pic_dituju: ''
+    pic_dituju: '',
+    nomor_surat: '',
+    tujuan: '',
   });
 
   // Efek ini berjalan otomatis saat halaman pertama kali dibuka
@@ -35,45 +38,85 @@ export default function FormTamuPublik() {
     fetchMasterData();
   }, []);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+
+    // Filter khusus kolom kontak: hapus otomatis semua karakter selain angka (0-9)
+    if (name === 'kontak') {
+      const onlyNumbers = value.replace(/\D/g, '');
+      setFormData({ ...formData, kontak: onlyNumbers });
+      return;
+    }
+
+    setFormData({ ...formData, [name]: value });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
-    // Proses kirim data ke Supabase
-    const { error } = await supabase
+    const hasNomorSurat = formData.nomor_surat.trim() !== '';
+    const statusOtomatis = hasNomorSurat ? 'ada' : 'tanpa';
+
+    // 1. Kirim data utama ke tabel kunjungan dan ambil ID-nya
+    const { data: kunjunganBaru, error } = await supabase
       .from('kunjungan')
       .insert([
         {
           nama_perwakilan: formData.nama_perwakilan,
           instansi_id: formData.instansi_id,
-          jumlah_rombongan: formData.jumlah_rombongan,
-          kontak: formData.kontak,
+          jumlah_rombongan: Number(formData.jumlah_rombongan),
+          kontak: formData.kontak || null,
           topik_id: formData.topik_id,
-          jalur_input: 'qr', // Karena ini form publik, otomatis jalur input QR
-          status_surat: 'tanpa', // Asumsi awal tamu QR datang langsung tanpa konfirmasi surat
-        }
-      ]);
-
-    setIsSubmitting(false);
+          tujuan: formData.tujuan.trim() || null,
+          jalur_input: 'qr',
+          status_surat: statusOtomatis,
+        },
+      ])
+      .select('id')
+      .single();
 
     if (error) {
+      setIsSubmitting(false);
       alert('Gagal menyimpan data: ' + error.message);
-    } else {
-      alert('Data Kunjungan Berhasil Dikirim!');
-      // Reset form
-      setFormData({
-        nama_perwakilan: '',
-        instansi_id: '',
-        jumlah_rombongan: 4,
-        kontak: '',
-        topik_id: '',
-        pic_dituju: ''
-      });
+      return;
     }
+
+    // 2. Jika tamu mengisi nomor surat, simpan ke tabel relasi kunjungan_surat
+    if (hasNomorSurat && kunjunganBaru?.id) {
+      const { error: suratError } = await supabase
+        .from('kunjungan_surat')
+        .insert([
+          {
+            kunjungan_id: kunjunganBaru.id,
+            nomor_surat: formData.nomor_surat.trim(),
+          },
+        ]);
+
+      if (suratError) {
+        setIsSubmitting(false);
+        alert('Data kunjungan tersimpan, tetapi gagal menyimpan nomor surat: ' + suratError.message);
+        return;
+      }
+    }
+
+    setIsSubmitting(false);
+    alert('Data Kunjungan Berhasil Dikirim!');
+
+    // Reset form
+    setFormData({
+      nama_perwakilan: '',
+      instansi_id: '',
+      jumlah_rombongan: 4,
+      kontak: '',
+      topik_id: '',
+      pic_dituju: '',
+      nomor_surat: '',
+      tujuan: '',
+    });
+    setIsAgreed(false);
   };
 
   return (
@@ -93,8 +136,8 @@ export default function FormTamuPublik() {
           {/* Nama Perwakilan */}
           <div>
             <label className="block text-gray-700 font-medium mb-2">Nama Perwakilan</label>
-            <input 
-              type="text" 
+            <input
+              type="text"
               name="nama_perwakilan"
               value={formData.nama_perwakilan}
               onChange={handleChange}
@@ -106,16 +149,18 @@ export default function FormTamuPublik() {
           {/* Instansi / Lembaga */}
           <div>
             <label className="block text-gray-700 font-medium mb-2">Instansi / Lembaga</label>
-            <select 
+            <select
               name="instansi_id"
               value={formData.instansi_id}
               onChange={handleChange}
-              required 
+              required
               className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             >
               <option value="">🔍 Pilih Instansi...</option>
               {instansiList.map((instansi) => (
-                <option key={instansi.id} value={instansi.id}>{instansi.nama}</option>
+                <option key={instansi.id} value={instansi.id}>
+                  {instansi.nama}
+                </option>
               ))}
             </select>
           </div>
@@ -123,8 +168,8 @@ export default function FormTamuPublik() {
           {/* Jumlah Rombongan */}
           <div>
             <label className="block text-gray-700 font-medium mb-2">Jumlah Rombongan</label>
-            <input 
-              type="number" 
+            <input
+              type="number"
               name="jumlah_rombongan"
               min="1"
               value={formData.jumlah_rombongan}
@@ -134,14 +179,17 @@ export default function FormTamuPublik() {
             />
           </div>
 
-          {/* Kontak / WhatsApp */}
+          {/* Kontak / WhatsApp (Hanya Angka) */}
           <div>
             <label className="block text-gray-700 font-medium mb-2">Kontak / No. WhatsApp (opsional)</label>
-            <input 
-              type="tel" 
+            <input
+              type="tel"
+              inputMode="numeric"
+              pattern="[0-9]*"
               name="kontak"
               value={formData.kontak}
               onChange={handleChange}
+              placeholder="Contoh: 081234567890"
               className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -149,28 +197,30 @@ export default function FormTamuPublik() {
           {/* Tujuan Kunjungan */}
           <div>
             <label className="block text-gray-700 font-medium mb-2">Tujuan / Topik Kunjungan</label>
-            <select 
+            <select
               name="topik_id"
               value={formData.topik_id}
               onChange={handleChange}
-              required 
+              required
               className="w-full border border-gray-300 rounded-lg px-4 py-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Pilih Topik...</option>
               {topikList.map((topik) => (
-                <option key={topik.id} value={topik.id}>{topik.nama}</option>
+                <option key={topik.id} value={topik.id}>
+                  {topik.nama}
+                </option>
               ))}
             </select>
           </div>
 
-          {/* Unit / PIC - (Ini masih statis, karena di DB belum kita buat tabel PIC/Unit) */}
+          {/* Unit / PIC */}
           <div>
             <label className="block text-gray-700 font-medium mb-2">Unit / PIC yang Dituju</label>
-            <select 
+            <select
               name="pic_dituju"
               value={formData.pic_dituju}
               onChange={handleChange}
-              required 
+              required
               className="w-full border border-gray-300 rounded-lg px-4 py-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Pilih PIC...</option>
@@ -179,10 +229,42 @@ export default function FormTamuPublik() {
             </select>
           </div>
 
+          {/* Nomor Surat (Opsional) */}
+          <div>
+            <label className="block text-gray-700 font-medium mb-2">
+              Nomor Surat Pengantar / Tugas (opsional)
+            </label>
+            <input
+              type="text"
+              name="nomor_surat"
+              value={formData.nomor_surat}
+              onChange={handleChange}
+              placeholder="Contoh: B-123/UN2.F14/HKP.02/2026"
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* Deskripsi Singkat Kegiatan (Opsional) */}
+          <div>
+            <label className="block text-gray-700 font-medium mb-2">
+              Deskripsi Singkat Kegiatan (opsional)
+            </label>
+            <textarea
+              name="tujuan"
+              rows={3}
+              value={formData.tujuan}
+              onChange={handleChange}
+              placeholder="Jelaskan secara singkat keperluan atau agenda kunjungan Anda..."
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
           {/* Checkbox Persetujuan PDP */}
           <div className="flex items-start mt-4">
-            <input 
-              type="checkbox" 
+            <input
+              type="checkbox"
+              checked={isAgreed}
+              onChange={(e) => setIsAgreed(e.target.checked)}
               required
               className="mt-1 w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
             />
@@ -192,10 +274,10 @@ export default function FormTamuPublik() {
           </div>
 
           {/* Tombol Kirim */}
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={isSubmitting}
-            className="w-full bg-[#1A62B7] hover:bg-blue-800 text-white font-semibold rounded-lg px-4 py-4 mt-4 transition-colors"
+            className="w-full bg-[#1A62B7] hover:bg-blue-800 text-white font-semibold rounded-lg px-4 py-4 mt-4 transition-all active:scale-95 disabled:opacity-60"
           >
             {isSubmitting ? 'Mengirim...' : 'Kirim Data Kunjungan'}
           </button>
