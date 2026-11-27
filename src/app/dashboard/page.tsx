@@ -556,7 +556,7 @@ export default function DashboardPage() {
                     >
                       Input Surat
                       <span className="transition-transform duration-200 group-hover:translate-x-1">
-                        →
+                        
                       </span>
                     </Link>
                   </div>
@@ -611,7 +611,6 @@ export default function DashboardPage() {
               className="group text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 transition-colors"
             >
               Lihat Semua
-              <span className="transition-transform duration-200 group-hover:translate-x-1">→</span>
             </Link>
           </div>
 
